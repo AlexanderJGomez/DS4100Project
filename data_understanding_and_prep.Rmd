@@ -1,0 +1,240 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Data Understanding:
+
+Data taken from: https://www.kaggle.com/drgilermo/nba-players-stats/data
+the column names and their descriptions are also there
+
+First, I removed the blank fields.
+
+I then decided to remove any fields with missing data
+
+
+After examining data I have decided I am only considering seasons after 1975 because seasons before that are missing some stats that the NBA did not record at that time.  Also, I decided to only count seasons for which a player played more than 40 games.  I will be adding a field, improvement, to measure the improvement of a player's PPG from this season to the season they played the year previous because I would like some sort of representation of how the player has been improving/progressing.  I am also adding the variable that we are going to try and predict:
+NextSeasonChange which is the percentage increase or decrease of the player's points per game for
+the next season
+
+
+
+```{r}
+data <- read.csv("data/Seasons_Stats.csv")
+drops <- c("blanl","blank2")
+data <- data[ , !(names(data) %in% drops)]
+data <- data[complete.cases(data), ]
+data <- data[data$Year > 1975 & !is.na(data$Year),]
+data <- data[order(data$Player, data$Age),]
+data <- data[data$G > 40,]
+data$Improvement <- NA
+data$NextSeasonChange <- NA
+```
+
+
+Converting everything from totals to per game stats to make it easier to evaluate the features
+
+
+```{r}
+
+total_stats <- c("MP", "FT", "FTA", "ORB", "DRB", "TRB", "AST", "STL", "BLK", "TOV", "PF", "PTS", "FG", "FGA", "X2P", "X2PA", "X3P", "X3PA")
+
+for (stat_name in total_stats) {
+  data[[stat_name]] <- round(data[[stat_name]] / data$G, digits = 1)
+}
+
+```
+
+I changed the fields that are percentages to be decimals.
+
+55.3% -> .553
+
+```{r}
+percentages <- c("ORB.", "DRB.", "TRB.", "AST.", "STL.", "BLK.", "TOV.", "USG.")
+
+for (stat_name in percentages) {
+  data[[stat_name]] <- data[[stat_name]] / 100
+}
+
+```
+
+
+Now I perform some analysis on the features and search for outliers.  I check for outliers using
+the standard method of checking whether the value lies greater than 3 standard deviations away 
+from the mean.  I do this for both MPG and PPG.  I do this for MPG only because I am curious, because judging by the histogram it looks like it is normally distributed and does not really have much if any outliers and in fact we find none.  However, for PPG I can clearly see outliers on the high side of the histogrm and sure enough, there are 69 outliers according to the standards stated above.  Because there are not many of these outliers, I will keep them.  Next, I take a look at assists, and notice that the histogram is indeed skewed.  Upon further inspection we detect 192 outliers.  I will also keep these outliers as well, and will inspect the fit on my model and see whether it is important to remove these.
+```{r}
+
+summary(data)
+
+
+hist(data$MP)
+hist(data$PER)
+hist(data$PTS)
+hist(data$AST)
+
+sd_mpg <- sd(data$MP)
+mean_mpg <- mean(data$MP)
+
+mpg_outliers <- c()
+for (i in 1:length(data$MP)) {
+  if((abs(data$MP[i] - mean_mpg) / sd_mpg) > 3) {
+    mpg_outliers <- append(data$X[i], mpg_outliers)
+  }
+}
+
+sd_pts <- sd(data$PTS)
+mean_pts <- mean(data$PTS)
+
+pts_outliers <- c()
+for (i in 1:length(data$PTS)) {
+  if((abs(data$PTS[i] - mean_pts) / sd_pts) > 3) {
+    pts_outliers <- append(data$X[i], pts_outliers)
+  }
+}
+
+
+sd_ast <- sd(data$AST)
+mean_ast <- mean(data$AST)
+
+ast_outliers <- c()
+for (i in 1:length(data$AST)) {
+  if((abs(data$AST[i] - mean_ast) / sd_ast) > 3) {
+    ast_outliers <- append(data$X[i], ast_outliers)
+  }
+}
+
+```
+
+
+
+
+In order to deal with players who switched teams, we will remove the rows for the stats
+of each individual team the player played for that season and only keep the row for that season that represents
+the aggregated stats over all teams the player played with that season.
+
+For example, the rows for a player's season where he got traded might look like:
+name, Team, year, GamesPlayed
+player1 LAL 2018 50
+player1 GSW 2018 20
+player1 TOT 2018 70
+
+but would become:
+
+player1 TOT 2018 70
+
+```{r}
+
+data$PlayerAndYear <- paste(data$Player, data$Year, sep = "-")
+
+for (x in unique(data$PlayerAndYear)) {
+  da <- data[data$PlayerAndYear == x,]
+  if (nrow(da) > 1) {
+    da <- da[da$Tm != "TOT",]$X
+    data <- data[!(data$X %in% da),]
+  }
+}
+
+```
+
+
+In this we will find rows that have a previous season and following season for the same player and
+previous and next years.  Then we will add an improvement percentage that corresponds to how much 
+the player's PPG improved compared to the previous season.  Lastly, we will add the variable we will be predicting, NextSeasonChange, which is the % change in PPG the next season
+
+
+```{r}
+
+for (row_index in 2:(nrow(data) - 1)) {
+  curr_row <- data[row_index,]
+  prev_row <- data[row_index-1,]
+  next_row <- data[row_index+1,]
+  if(prev_row$Player == curr_row$Player & (prev_row$Year + 1) == curr_row$Year & 
+    next_row$Player == curr_row$Player & (next_row$Year - 1) == curr_row$Year) {
+    data$Improvement[row_index] = (curr_row$PTS / prev_row$PTS) - 1
+    data$NextSeasonChange[row_index] = (next_row$PTS / curr_row$PTS) - 1
+  }
+}
+```
+
+Now we will keep all the rows that have the NextSeasonChange field and also remove the PlayerAndYear
+field that we used in order 
+
+```{r}
+
+data <- data[!(is.na(data$NextSeasonChange)),]
+data <- data[ , !(names(data) %in% c("PlayerAndYear"))]
+
+```
+
+
+Now that the new fields have been added and the necessary rows have been removed after that, I will not perform further cleaning of the data based on the information that the data summary provides me.
+
+
+```{r}
+summary(data)
+data <- data[ , !(names(data) %in% c("X3PAr"))]
+```
+
+
+Parsing Position text to make it only use first mentioned position
+
+PG-SG -> PG
+
+Then, converted it to dummy codes
+I didn't include PF as a new field because we need (num categories - 1) dummy codes
+
+```{r}
+
+data$Pos <- gsub("-.*", "", data$Pos)
+
+positions <- c("PG", "SG", "SF", "C")
+for (position in positions) {
+  data[[position]] <- as.numeric(data$Pos == position)
+}
+
+data <- data[ , !(names(data) %in% c("Pos"))]
+
+
+
+
+```
+
+
+
+
+Next, we must convert team to dummy codes as well.
+
+
+```{r}
+teams <- unique(data$Tm)
+for (team in teams[1:(length(teams) - 1)]) {
+  data[[team]] <- as.numeric(data$Tm == team)
+}
+
+data <- data[ , !(names(data) %in% c("Tm"))]
+
+```
+
+
+Here I test the correlation between Improvement and NextSeasonChange, and NextSeasonChange and age.
+
+I hypothesize that if you improve 1 year you may continue to improve, or that as you get older 
+you improve less.  However, I am shown very very small correlations for the two tests.  I used pearson because all 3 features are generally normal looking
+
+```{r}
+
+cor.test(data$NextSeasonChange, y=data$Improvement)
+
+cor.test(data$NextSeasonChange, y=data$Age)
+
+```
+
+
+Now I write the prepared data to a new file
+
+```{r}
+write.csv(data, file= "data/formatted_season_data.csv")
+```
+
+
+

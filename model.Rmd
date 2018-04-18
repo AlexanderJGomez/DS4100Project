@@ -1,0 +1,262 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Here we retrieve the data from mongo.
+
+```{r}
+
+library(mongolite)
+library(e1071)
+library(FNN)
+my_collection <- mongo(collection = "seasons", db = "DS4100Project") # create connection, database and collection
+data <- my_collection$find()
+```
+
+
+Here I create the training and validation datasets
+
+```{r}
+training_size <- ceiling(nrow(data) / 7)
+indices <- 1:nrow(data)
+set.seed(33)
+
+training_indices <- sample(indices, size=training_size)
+training_data <- data[training_indices,]
+
+validation_indices <- setdiff(indices, training_indices)
+validation_data <- data[validation_indices,]
+
+```
+
+
+
+
+At first I started with all features.  Then in order I used backwards elim to remove:
+
+"BOS", "OWS", "TS_", "ATL", "WSB", "IND","SAC", "TRB_", "X3P", "WAS", "OKC", "POR", 
+"CLE", "DET", "X3P_", "KCK", "NOK", "MIL", "VAN", "TOR", "NYK", "LAC", "MEM", "NOP",
+"ORL", "DWS", "GSW", "X2P_", "PG", "Year", "DRB", "SAS", "WS_48", "FTA", "USG_",
+"FG", "X2P", "TOV", "MIA", "SG", "FG_", "CHI", "SDC", "PHI", "CHH", "BRK", "SEA",
+"PHO", "OBPM", "DBPM", "AST", "AST_", "CHA", "SF", "NJN", "GS", "DEN", "C", "NOH",
+"ORB_", "DRB_", "ORB", "TRB", "VORP", "HOU", "FGA", "X2PA", "X3PA", "TOT", "FT_",
+"MP", "BPM", "FTr", "FT", "UTA", "PTS"
+
+
+From the summary we can see that we do not come out with a great model.  
+The adjusted R-squared for this algorithm is .2849
+
+
+
+```{r}
+remove_from_lm <- c("X_1", "X", "Player", "NextSeasonChange", 
+            "BOS", "OWS", "TS_", "ATL", "WSB", "IND","SAC", "TRB_", "X3P", "WAS", "OKC", "POR", 
+            "CLE", "DET", "X3P_", "KCK", "NOK", "MIL", "VAN", "TOR", "NYK", "LAC", "MEM", "NOP",
+            "ORL", "DWS", "GSW", "X2P_", "PG", "Year", "DRB", "SAS", "WS_48", "FTA", "USG_",
+            "FG", "X2P", "TOV", "MIA", "SG", "FG_", "CHI", "SDC", "PHI", "CHH", "BRK", "SEA",
+            "PHO", "OBPM", "DBPM", "AST", "AST_", "CHA", "SF", "NJN", "GS", "DEN", "C", "NOH",
+            "ORB_", "DRB_", "ORB", "TRB", "VORP", "HOU", "FGA", "X2PA", "X3PA", "TOT", "FT_",
+            "MP", "BPM", "FTr", "FT", "UTA", "PTS")
+features <- colnames(training_data)
+features <- features[! features %in% remove_from_lm]
+fmla <- as.formula(paste("NextSeasonChange ~ ", paste(features, collapse= "+")))
+mod <- lm(fmla, training_data)
+
+summary(mod)
+```
+
+
+
+Here is further proof that the model did not perform well.  I was unable to find features that
+could provide for a somewhat accurate prediction.  The graph below shows the inaccuracy of the model, if the data mostly fell on the y=x line then we would know that it were much more accurate
+
+
+```{r}
+# make a prediction for each X
+predictedY <- predict(mod, validation_data)
+# display the predictions
+plot(validation_data$NextSeasonChange, predictedY)
+```
+
+
+calculating MAD
+
+This shows that the average error is .237
+This means the data is on average 23% of the player's previous PPG off from the actual next season PPG. This is not good.  This means that if a player scores 10ppg 1 season, and then scores 12.3ppg the next, we could have predicted that the player scored 14.6, 23% more, which is not a great prediction.
+
+```{r}
+
+lm_mad <- 0
+
+for (index in 1:nrow(validation_data)) {
+  lm_mad <- lm_mad + abs(validation_data$NextSeasonChange[index] - predictedY[index])
+}
+
+lm_mad <- lm_mad / length(validation_data$NextSeasonChange)
+
+
+
+```
+
+
+
+The Next model choice is Support Vector Machine Regression
+The results from this model look quite similar to the linear regression without any tuning.
+
+
+```{r}
+
+remove2 <- c("X_1", "X", "Player", "NextSeasonChange")
+features2 <- colnames(training_data)
+features2 <- features2[! features2 %in% remove2]
+fmla2 <- as.formula(paste("NextSeasonChange ~ ", paste(features2, collapse= "+")))
+svm_model <- svm(fmla2 , training_data)
+ 
+svmPredictedY <- predict(svm_model, validation_data)
+
+plot(validation_data$NextSeasonChange, svmPredictedY)
+
+```
+
+Calculating the MAD for the first SVM model
+we get .241
+
+```{r}
+svm_mad <- 0
+
+for (index in 1:nrow(validation_data)) {
+  svm_mad <- svm_mad + abs(validation_data$NextSeasonChange[index] - svmPredictedY[index])
+}
+
+svm_mad <- svm_mad / length(validation_data$NextSeasonChange)
+```
+
+
+
+
+The Next model choice is KNN regression
+
+In order to not increase complexity too much we will use the same features that the linear regression used.
+
+```{r}
+
+knn_training_data <- training_data[ , !(names(training_data) %in% remove_from_lm)]
+knn_validation_data <- validation_data[ , !(names(validation_data) %in% remove_from_lm)]
+knn_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, y = training_data$NextSeasonChange, k=ceiling(sqrt(nrow(knn_training_data))))
+
+```
+
+
+
+Calculating the MAD for knn model
+
+We get a mad of .237699
+
+```{r}
+knn_mad <- 0
+
+for (index in 1:nrow(validation_data)) {
+  knn_mad <- knn_mad + abs(validation_data$NextSeasonChange[index] - knn_predictions$pred[index])
+}
+
+knn_mad <- knn_mad / length(validation_data$NextSeasonChange)
+```
+
+
+Here we tune the k parameter in the knn model
+
+we already used k = 28 so we will tune over the range 23-33
+
+This shows a clear trend of decreasing as k gets larger so we will further test larger values of k.
+
+However, it does seem that it is going to level out.
+
+```{r}
+
+knn_tuning_mads <- c()
+
+for (tuning_k in 23:33) {
+  tuning_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, y = training_data$NextSeasonChange, k=tuning_k)
+  tuning_knn_mad <- 0
+
+  for (index in 1:nrow(validation_data)) {
+    tuning_knn_mad <- tuning_knn_mad + abs(validation_data$NextSeasonChange[index] - tuning_predictions$pred[index])
+  }
+  
+  tuning_knn_mad <- tuning_knn_mad / length(validation_data$NextSeasonChange)
+  knn_tuning_mads <- append(knn_tuning_mads, tuning_knn_mad)
+}
+
+plot(23:33, knn_tuning_mads)
+
+
+```
+
+
+
+
+Knn Tuning pt2
+
+At this point we see that MAD does level out and that ~.236 is the best we can do.
+
+We will go with k=36 as our best tuned model so to not end up overfitting, and staying close
+to that nice number of sqrt(size of testing data)
+
+
+```{r}
+
+knn_tuning_mads <- c()
+
+for (tuning_k in 34:44) {
+  tuning_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, y = training_data$NextSeasonChange, k=tuning_k)
+  tuning_knn_mad <- 0
+
+  for (index in 1:nrow(validation_data)) {
+    tuning_knn_mad <- tuning_knn_mad + abs(validation_data$NextSeasonChange[index] - tuning_predictions$pred[index])
+  }
+  
+  tuning_knn_mad <- tuning_knn_mad / length(validation_data$NextSeasonChange)
+  knn_tuning_mads <- append(knn_tuning_mads, tuning_knn_mad)
+}
+
+best_knn_mad <- knn_tuning_mads[3]
+
+plot(34:44, knn_tuning_mads)
+
+```
+
+
+
+
+Comparison of Models
+
+I decided to compare the models using MAD
+
+I tried to use MSE but the results were difficult to understand.  this is because
+the residual I receive from the results is always 1<=x<= 1 and so the squared error
+actually becomes smaller, which does not provide the same insight that a value > 1 would provide.
+MSE would still be useful for comparing the models, but I decided it would be better to use MAD
+because I could use it to compare models while still understanding what the error looked like.
+
+Overall, the models all performed similarly, with kNN performing very minimally better with a MAD
+of ~.2359.  Also, I was unable to find a well fitting model.  The MADs found for the three models were very inaccurate.
+
+```{r}
+
+print("Multiple Linear Regression MAD:")
+print(lm_mad)
+
+print("SVM MAD:")
+print(svm_mad)
+
+print("Best kNN MAD:")
+print(best_knn_mad)
+
+
+
+```
+
+
+
+

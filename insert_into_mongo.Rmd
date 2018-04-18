@@ -1,0 +1,46 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+In order to get the extra points for using JSON(please let this work) I converted the csv file to json with the following:
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(maps)
+library(ggmap)
+library(mongolite)
+library(lubridate)
+library(gridExtra)
+library(jsonlite)
+library(readr)
+
+formatted_season_data <- read.csv("data/formatted_season_data.csv")
+formatted_season_json = toJSON(unname(split(formatted_season_data, 1:nrow(formatted_season_data))))
+
+write(formatted_season_json, file="data/formatted_season_data.json")
+```
+
+
+Now we will read the json form the new file and we will get a list of dataframes, so now we will rbind these dataframes together to get the correct dataframe
+
+```{r}
+
+df_list = fromJSON(read_file("data/formatted_season_data.json"))
+data = df_list[[1]]
+for (i in 2:length(df_list)) {
+  data = rbind(data, df_list[[i]])
+}
+```
+
+
+Creates the db and inserts the dataframe into it.
+
+```{r}
+my_collection <- mongo(collection = "seasons", db = "DS4100Project") # create connection, database and collection
+my_collection$insert(data)
+```
+
+
+
