@@ -18,7 +18,7 @@ data <- my_collection$find()
 Here I create the training and validation datasets
 
 ```{r}
-training_size <- ceiling(nrow(data) / 7)
+training_size <- ceiling(nrow(data) * .7)
 indices <- 1:nrow(data)
 set.seed(33)
 
@@ -35,29 +35,29 @@ validation_data <- data[validation_indices,]
 
 At first I started with all features.  Then in order I used backwards elim to remove:
 
-"BOS", "OWS", "TS_", "ATL", "WSB", "IND","SAC", "TRB_", "X3P", "WAS", "OKC", "POR", 
-"CLE", "DET", "X3P_", "KCK", "NOK", "MIL", "VAN", "TOR", "NYK", "LAC", "MEM", "NOP",
-"ORL", "DWS", "GSW", "X2P_", "PG", "Year", "DRB", "SAS", "WS_48", "FTA", "USG_",
-"FG", "X2P", "TOV", "MIA", "SG", "FG_", "CHI", "SDC", "PHI", "CHH", "BRK", "SEA",
-"PHO", "OBPM", "DBPM", "AST", "AST_", "CHA", "SF", "NJN", "GS", "DEN", "C", "NOH",
-"ORB_", "DRB_", "ORB", "TRB", "VORP", "HOU", "FGA", "X2PA", "X3PA", "TOT", "FT_",
-"MP", "BPM", "FTr", "FT", "UTA", "PTS"
+"LAL", "ATL", "DRB", "WAS", "SDC", "DET", "PTS", "NOH", "WS",
+"FG", "C", "TOV_", "TOR", "OWS", "TS_", "X3P_", "GS", "CHH", "AST", "PG",
+"BOS", "NYK", "USG_", "KCK", "FT_", "FT", "FGA", "DWS", "BRK", "Year",
+"TRB", "NOK", "VAN", "LAC", "POR", "HOU", "MIL", "NOP", "PHO", "MIN", "DEN",
+"UTA", "PHI", "TOT", "IND", "SAC", "SEA", "GSW", "WSB", "ORL", "MEM", "X2P_",
+"X3PA", "eFG_", "OKC", "X2PA", "X3P", "CHI", "BLK", "MIA", "ORB_", "DRB_",
+"NJN", "DBPM", "SAS", "CLE"
 
 
 From the summary we can see that we do not come out with a great model.  
-The adjusted R-squared for this algorithm is .2849
+The adjusted R-squared for this algorithm is .2329
 
 
 
 ```{r}
-remove_from_lm <- c("X_1", "X", "Player", "NextSeasonChange", 
-            "BOS", "OWS", "TS_", "ATL", "WSB", "IND","SAC", "TRB_", "X3P", "WAS", "OKC", "POR", 
-            "CLE", "DET", "X3P_", "KCK", "NOK", "MIL", "VAN", "TOR", "NYK", "LAC", "MEM", "NOP",
-            "ORL", "DWS", "GSW", "X2P_", "PG", "Year", "DRB", "SAS", "WS_48", "FTA", "USG_",
-            "FG", "X2P", "TOV", "MIA", "SG", "FG_", "CHI", "SDC", "PHI", "CHH", "BRK", "SEA",
-            "PHO", "OBPM", "DBPM", "AST", "AST_", "CHA", "SF", "NJN", "GS", "DEN", "C", "NOH",
-            "ORB_", "DRB_", "ORB", "TRB", "VORP", "HOU", "FGA", "X2PA", "X3PA", "TOT", "FT_",
-            "MP", "BPM", "FTr", "FT", "UTA", "PTS")
+remove_from_lm <- c("X_1", "X", "Player", "NextSeasonChange",
+                    "LAL", "ATL", "DRB", "WAS", "SDC", "DET", "PTS", "NOH", "WS",
+                    "FG", "C", "TOV_", "TOR", "OWS", "TS_", "X3P_", "GS", "CHH", "AST", "PG",
+                    "BOS", "NYK", "USG_", "KCK", "FT_", "FT", "FGA", "DWS", "BRK", "Year",
+                    "TRB", "NOK", "VAN", "LAC", "POR", "HOU", "MIL", "NOP", "PHO", "MIN", "DEN",
+                    "UTA", "PHI", "TOT", "IND", "SAC", "SEA", "GSW", "WSB", "ORL", "MEM", "X2P_",
+                    "X3PA", "eFG_", "OKC", "X2PA", "X3P", "CHI", "BLK", "MIA", "ORB_", "DRB_",
+                    "NJN", "DBPM", "SAS", "CLE")
 features <- colnames(training_data)
 features <- features[! features %in% remove_from_lm]
 fmla <- as.formula(paste("NextSeasonChange ~ ", paste(features, collapse= "+")))
@@ -82,7 +82,7 @@ plot(validation_data$NextSeasonChange, predictedY)
 
 calculating MAD
 
-This shows that the average error is .237
+This shows that the average error is .226
 This means the data is on average 23% of the player's previous PPG off from the actual next season PPG. This is not good.  This means that if a player scores 10ppg 1 season, and then scores 12.3ppg the next, we could have predicted that the player scored 14.6, 23% more, which is not a great prediction.
 
 ```{r}
@@ -120,7 +120,7 @@ plot(validation_data$NextSeasonChange, svmPredictedY)
 ```
 
 Calculating the MAD for the first SVM model
-we get .241
+we get .226
 
 ```{r}
 svm_mad <- 0
@@ -151,7 +151,7 @@ knn_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, 
 
 Calculating the MAD for knn model
 
-We get a mad of .237699
+We get a mad of .222
 
 ```{r}
 knn_mad <- 0
@@ -166,17 +166,15 @@ knn_mad <- knn_mad / length(validation_data$NextSeasonChange)
 
 Here we tune the k parameter in the knn model
 
-we already used k = 28 so we will tune over the range 23-33
+we already used k = 61 so we will tune over the range 56-66
 
-This shows a clear trend of decreasing as k gets larger so we will further test larger values of k.
-
-However, it does seem that it is going to level out.
+This shows no significant trends of increasing or decreasing with larger or smaller k so we will keep k the same
 
 ```{r}
 
 knn_tuning_mads <- c()
 
-for (tuning_k in 23:33) {
+for (tuning_k in 56:66) {
   tuning_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, y = training_data$NextSeasonChange, k=tuning_k)
   tuning_knn_mad <- 0
 
@@ -188,43 +186,13 @@ for (tuning_k in 23:33) {
   knn_tuning_mads <- append(knn_tuning_mads, tuning_knn_mad)
 }
 
-plot(23:33, knn_tuning_mads)
+best_knn_mad <- knn_tuning_mads[6]
+
+plot(56:66, knn_tuning_mads)
 
 
 ```
 
-
-
-
-Knn Tuning pt2
-
-At this point we see that MAD does level out and that ~.236 is the best we can do.
-
-We will go with k=36 as our best tuned model so to not end up overfitting, and staying close
-to that nice number of sqrt(size of testing data)
-
-
-```{r}
-
-knn_tuning_mads <- c()
-
-for (tuning_k in 34:44) {
-  tuning_predictions <- knn.reg(train = knn_training_data, test=knn_validation_data, y = training_data$NextSeasonChange, k=tuning_k)
-  tuning_knn_mad <- 0
-
-  for (index in 1:nrow(validation_data)) {
-    tuning_knn_mad <- tuning_knn_mad + abs(validation_data$NextSeasonChange[index] - tuning_predictions$pred[index])
-  }
-  
-  tuning_knn_mad <- tuning_knn_mad / length(validation_data$NextSeasonChange)
-  knn_tuning_mads <- append(knn_tuning_mads, tuning_knn_mad)
-}
-
-best_knn_mad <- knn_tuning_mads[3]
-
-plot(34:44, knn_tuning_mads)
-
-```
 
 
 
@@ -239,8 +207,10 @@ actually becomes smaller, which does not provide the same insight that a value >
 MSE would still be useful for comparing the models, but I decided it would be better to use MAD
 because I could use it to compare models while still understanding what the error looked like.
 
-Overall, the models all performed similarly, with kNN performing very minimally better with a MAD
-of ~.2359.  Also, I was unable to find a well fitting model.  The MADs found for the three models were very inaccurate.
+The models all performed similarly, with kNN performing very minimally better with a MAD
+of ~.222.  
+
+Last, I was unable to find a well fitting model.  The MADs found for the three models were very inaccurate.  I think if time permitted, I would create something like a moving average, using the players past few season PPG to predict the next season's PPG.  Another option could be to add more features like the Improvement feature I added above.  I thnk there needs to be a larger indication of how the player has been progressing, so it might be helpful to know something like:  a player's shooting percentage has decreased 20% this year.
 
 ```{r}
 

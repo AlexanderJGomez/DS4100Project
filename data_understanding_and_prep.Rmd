@@ -114,8 +114,11 @@ the aggregated stats over all teams the player played with that season.
 
 For example, the rows for a player's season where he got traded might look like:
 name, Team, year, GamesPlayed
+
 player1 LAL 2018 50
+
 player1 GSW 2018 20
+
 player1 TOT 2018 70
 
 but would become:
@@ -157,7 +160,7 @@ for (row_index in 2:(nrow(data) - 1)) {
 ```
 
 Now we will keep all the rows that have the NextSeasonChange field and also remove the PlayerAndYear
-field that we used in order 
+field that we used in order clean data for players that were traded.
 
 ```{r}
 
@@ -214,6 +217,12 @@ for (team in teams[1:(length(teams) - 1)]) {
 data <- data[ , !(names(data) %in% c("Tm"))]
 
 ```
+
+
+
+
+
+
 
 
 Here I test the correlation between Improvement and NextSeasonChange, and NextSeasonChange and age.
